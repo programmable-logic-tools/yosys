@@ -2185,10 +2185,17 @@ skip_dynamic_range_lvalue_expansion:;
 					str == "\\$max"
 			    )
 			{
-				bool func_with_two_arguments = (str == "\\$pow" || str == "\\$atan2" || str == "\\$hypot" || str == "\\$max");
-				double x = 0, y = 0;
+				const uint32_t max_arg_count = 64;
 
-				if (func_with_two_arguments) {
+				bool functions_with_two_arguments = (str == "\\$pow" || str == "\\$atan2" || str == "\\$hypot");
+				bool functions_with_at_least_two_arguments = (str == "\\$max");
+
+				if (functions_with_at_least_two_arguments) {
+					if (children.size() < 2)
+						log_file_error(filename, linenum, "System function %s got %d arguments, expected at least 2.\n",
+								RTLIL::unescape_id(str).c_str(), int(children.size()));
+				}
+				else if (functions_with_two_arguments) {
 					if (children.size() != 2)
 						log_file_error(filename, linenum, "System function %s got %d arguments, expected 2.\n",
 								RTLIL::unescape_id(str).c_str(), int(children.size()));
@@ -2198,62 +2205,63 @@ skip_dynamic_range_lvalue_expansion:;
 								RTLIL::unescape_id(str).c_str(), int(children.size()));
 				}
 
-				if (children.size() >= 1) {
-					while (children[0]->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
-					if (!children[0]->isConst())
-						log_file_error(filename, linenum, "Failed to evaluate system function `%s' with non-constant argument.\n",
-								RTLIL::unescape_id(str).c_str());
-					int child_width_hint = width_hint;
-					bool child_sign_hint = sign_hint;
-					children[0]->detectSignWidth(child_width_hint, child_sign_hint);
-					x = children[0]->asReal(child_sign_hint);
-				}
+				double arg[max_arg_count];
+				for (uint32_t i=0; i<children.size(); i++)
+				{
+					// Simplify the system function's argument
+					while (children[i]->simplify(true, false, false, stage, width_hint, sign_hint, false));
 
-				if (children.size() >= 2) {
-					while (children[1]->simplify(true, false, false, stage, width_hint, sign_hint, false)) { }
-					if (!children[1]->isConst())
+					// A system function can only yield a result, if the argument is constant.
+					if (!children[i]->isConst())
 						log_file_error(filename, linenum, "Failed to evaluate system function `%s' with non-constant argument.\n",
 								RTLIL::unescape_id(str).c_str());
+
 					int child_width_hint = width_hint;
 					bool child_sign_hint = sign_hint;
-					children[1]->detectSignWidth(child_width_hint, child_sign_hint);
-					y = children[1]->asReal(child_sign_hint);
+					children[i]->detectSignWidth(child_width_hint, child_sign_hint);
+					arg[i] = children[i]->asReal(child_sign_hint);
 				}
 
 				if (str == "\\$max")
 				{
-					uint32_t v = x;
-					if (y > x)
-						v = y;
+					// The new node has the value of the largest function argument.
+					uint32_t v = (uint32_t) arg[0];
+					std::cout << "$max(" << arg[0];
+					for (uint32_t i=1; i<children.size(); i++)
+					{
+						std::cout << ", " << arg[i];
+						if (arg[i] > v)
+							v = arg[i];
+					}
+					std::cout << ") = " << v << ";\n";
 					newNode = mkconst_int(v, false);
-					printf("max(%d, %d) = %d;\n", (int32_t) x, (int32_t) y, v);
 				}
 				else if (str == "\\$rtoi") {
-					newNode = AstNode::mkconst_int(x, true);
+					newNode = AstNode::mkconst_int(arg[0], true);
 				} else {
 					newNode = new AstNode(AST_REALVALUE);
-					if (str == "\\$ln")         newNode->realvalue = ::log(x);
-					else if (str == "\\$log10") newNode->realvalue = ::log10(x);
-					else if (str == "\\$exp")   newNode->realvalue = ::exp(x);
-					else if (str == "\\$sqrt")  newNode->realvalue = ::sqrt(x);
-					else if (str == "\\$pow")   newNode->realvalue = ::pow(x, y);
-					else if (str == "\\$floor") newNode->realvalue = ::floor(x);
-					else if (str == "\\$ceil")  newNode->realvalue = ::ceil(x);
-					else if (str == "\\$sin")   newNode->realvalue = ::sin(x);
-					else if (str == "\\$cos")   newNode->realvalue = ::cos(x);
-					else if (str == "\\$tan")   newNode->realvalue = ::tan(x);
-					else if (str == "\\$asin")  newNode->realvalue = ::asin(x);
-					else if (str == "\\$acos")  newNode->realvalue = ::acos(x);
-					else if (str == "\\$atan")  newNode->realvalue = ::atan(x);
-					else if (str == "\\$atan2") newNode->realvalue = ::atan2(x, y);
-					else if (str == "\\$hypot") newNode->realvalue = ::hypot(x, y);
-					else if (str == "\\$sinh")  newNode->realvalue = ::sinh(x);
-					else if (str == "\\$cosh")  newNode->realvalue = ::cosh(x);
-					else if (str == "\\$tanh")  newNode->realvalue = ::tanh(x);
-					else if (str == "\\$asinh") newNode->realvalue = ::asinh(x);
-					else if (str == "\\$acosh") newNode->realvalue = ::acosh(x);
-					else if (str == "\\$atanh") newNode->realvalue = ::atanh(x);
-					else if (str == "\\$itor")  newNode->realvalue = x;
+					if (str == "\\$ln")         newNode->realvalue = ::log(arg[0]);
+					else if (str == "\\$log10") newNode->realvalue = ::log10(arg[0]);
+					else if (str == "\\$exp")   newNode->realvalue = ::exp(arg[0]);
+					else if (str == "\\$sqrt")  newNode->realvalue = ::sqrt(arg[0]);
+					else if (str == "\\$pow")   newNode->realvalue = ::pow(arg[0], arg[1]);
+					else if (str == "\\$floor") newNode->realvalue = ::floor(arg[0]);
+					else if (str == "\\$ceil")  newNode->realvalue = ::ceil(arg[0]);
+					else if (str == "\\$sin")   newNode->realvalue = ::sin(arg[0]);
+					else if (str == "\\$cos")   newNode->realvalue = ::cos(arg[0]);
+					else if (str == "\\$tan")   newNode->realvalue = ::tan(arg[0]);
+					else if (str == "\\$asin")  newNode->realvalue = ::asin(arg[0]);
+					else if (str == "\\$acos")  newNode->realvalue = ::acos(arg[0]);
+					else if (str == "\\$atan")  newNode->realvalue = ::atan(arg[0]);
+					else if (str == "\\$atan2") newNode->realvalue = ::atan2(arg[0], arg[1]);
+					else if (str == "\\$hypot") newNode->realvalue = ::hypot(arg[0], arg[1]);
+					else if (str == "\\$sinh")  newNode->realvalue = ::sinh(arg[0]);
+					else if (str == "\\$cosh")  newNode->realvalue = ::cosh(arg[0]);
+					else if (str == "\\$tanh")  newNode->realvalue = ::tanh(arg[0]);
+					else if (str == "\\$asinh") newNode->realvalue = ::asinh(arg[0]);
+					else if (str == "\\$acosh") newNode->realvalue = ::acosh(arg[0]);
+					else if (str == "\\$atanh") newNode->realvalue = ::atanh(arg[0]);
+					else if (str == "\\$itor")  newNode->realvalue = arg[0];
 					else log_abort();
 				}
 				goto apply_newNode;
