@@ -1,6 +1,6 @@
 
-CONFIG := clang
-# CONFIG := gcc
+#CONFIG := clang
+CONFIG := gcc
 # CONFIG := gcc-4.8
 # CONFIG := afl-gcc
 # CONFIG := emcc
@@ -170,7 +170,7 @@ ABCMKARGS += ARCHFLAGS="-DABC_USE_STDINT_H"
 
 ifneq ($(SANITIZER),)
 $(info [Clang Sanitizer] $(SANITIZER))
-CXXFLAGS += -g -O1 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=$(SANITIZER)
+CXXFLAGS += -g -O3 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=$(SANITIZER)
 LDFLAGS += -g -fsanitize=$(SANITIZER)
 ifeq ($(SANITIZER),address)
 ENABLE_COVER := 0
@@ -188,7 +188,7 @@ endif
 else ifeq ($(CONFIG),gcc)
 CXX = gcc
 LD = gcc
-CXXFLAGS += -std=c++11 -Os
+CXXFLAGS += -std=c++11 -O3
 ABCMKARGS += ARCHFLAGS="-DABC_USE_STDINT_H"
 
 else ifeq ($(CONFIG),gcc-static)
@@ -196,7 +196,7 @@ LD = $(CXX)
 LDFLAGS := $(filter-out -rdynamic,$(LDFLAGS)) -static
 LDLIBS := $(filter-out -lrt,$(LDLIBS))
 CXXFLAGS := $(filter-out -fPIC,$(CXXFLAGS))
-CXXFLAGS += -std=c++11 -Os
+CXXFLAGS += -std=c++11 -O3
 ABCMKARGS = CC="$(CC)" CXX="$(CXX)" LD="$(LD)" ABC_USE_LIBSTDCXX=1 LIBS="-lm -lpthread -static" OPTFLAGS="-O" \
                        ARCHFLAGS="-DABC_USE_STDINT_H -DABC_NO_DYNAMIC_LINKING=1 -Wno-unused-but-set-variable $(ARCHFLAGS)" ABC_USE_NO_READLINE=1
 ifeq ($(DISABLE_ABC_THREADS),1)
@@ -206,19 +206,19 @@ endif
 else ifeq ($(CONFIG),gcc-4.8)
 CXX = gcc-4.8
 LD = gcc-4.8
-CXXFLAGS += -std=c++11 -Os
+CXXFLAGS += -std=c++11 -O3
 ABCMKARGS += ARCHFLAGS="-DABC_USE_STDINT_H"
 
 else ifeq ($(CONFIG),afl-gcc)
 CXX = AFL_QUIET=1 AFL_HARDEN=1 afl-gcc
 LD = AFL_QUIET=1 AFL_HARDEN=1 afl-gcc
-CXXFLAGS += -std=c++11 -Os
+CXXFLAGS += -std=c++11 -O3
 ABCMKARGS += ARCHFLAGS="-DABC_USE_STDINT_H"
 
 else ifeq ($(CONFIG),cygwin)
 CXX = gcc
 LD = gcc
-CXXFLAGS += -std=gnu++11 -Os
+CXXFLAGS += -std=gnu++11 -O3
 ABCMKARGS += ARCHFLAGS="-DABC_USE_STDINT_H"
 
 else ifeq ($(CONFIG),emcc)
@@ -226,7 +226,7 @@ CXX = emcc
 LD = emcc
 CXXFLAGS := -std=c++11 $(filter-out -fPIC -ggdb,$(CXXFLAGS))
 ABCMKARGS += ARCHFLAGS="-DABC_USE_STDINT_H -DABC_MEMALIGN=8"
-EMCCFLAGS := -Os -Wno-warn-absolute-paths
+EMCCFLAGS := -O3 -Wno-warn-absolute-paths
 EMCCFLAGS += --memory-init-file 0 --embed-file share -s NO_EXIT_RUNTIME=1
 EMCCFLAGS += -s EXPORTED_FUNCTIONS="['_main','_run','_prompt','_errmsg']"
 EMCCFLAGS += -s TOTAL_MEMORY=128*1024*1024
