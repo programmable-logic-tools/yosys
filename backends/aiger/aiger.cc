@@ -91,6 +91,9 @@ struct AigerWriter
 		} else
 		if (alias_map.count(bit)) {
 			a = bit2aig(alias_map.at(bit));
+		} else
+		if (initstate_bits.count(bit)) {
+			a = initstate_ff;
 		}
 
 		if (bit == State::Sx || bit == State::Sz)
@@ -783,6 +786,14 @@ struct AigerBackend : public Backend {
 
 		if (top_module == nullptr)
 			log_error("Can't find top module in current design!\n");
+
+		if (!design->selected_whole_module(top_module))
+			log_cmd_error("Can't handle partially selected module %s!\n", log_id(top_module));
+
+		if (!top_module->processes.empty())
+			log_error("Found unmapped processes in module %s: unmapped processes are not supported in AIGER backend!\n", log_id(top_module));
+		if (!top_module->memories.empty())
+			log_error("Found unmapped memories in module %s: unmapped memories are not supported in AIGER backend!\n", log_id(top_module));
 
 		AigerWriter writer(top_module, zinit_mode, imode, omode, bmode, lmode);
 		writer.write_aiger(*f, ascii_mode, miter_mode, symbols_mode);

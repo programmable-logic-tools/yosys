@@ -130,7 +130,7 @@ RTLIL::SigBit VerificImporter::net_map_at(Net *net)
 
 bool is_blackbox(Netlist *nl)
 {
-	if (nl->IsBlackBox())
+	if (nl->IsBlackBox() || nl->IsEmptyBox())
 		return true;
 
 	const char *attr = nl->GetAttValue("blackbox");
@@ -539,6 +539,14 @@ bool VerificImporter::import_netlist_instance_cells(Instance *inst, RTLIL::IdStr
 		return true;
 	}
 
+	if (inst->Type() == OPER_REDUCE_NAND) {
+		Wire *tmp = module->addWire(NEW_ID);
+		cell = module->addReduceAnd(inst_name, IN, tmp, SIGNED);
+		module->addNot(NEW_ID, tmp, net_map_at(inst->GetOutput()));
+		import_attributes(cell->attributes, inst);
+		return true;
+	}
+
 	if (inst->Type() == OPER_REDUCE_OR) {
 		cell = module->addReduceOr(inst_name, IN, net_map_at(inst->GetOutput()), SIGNED);
 		import_attributes(cell->attributes, inst);
@@ -784,10 +792,21 @@ void VerificImporter::merge_past_ffs(pool<RTLIL::Cell*> &candidates)
 		merge_past_ffs_clock(it.second, it.first.first, it.first.second);
 }
 
-void VerificImporter::import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*> &nl_todo)
+void VerificImporter::import_netlist(RTLIL::Design *design, Netlist *nl, std::set<Netlist*> &nl_todo, bool norename)
 {
 	std::string netlist_name = nl->GetAtt(" \\top") ? nl->CellBaseName() : nl->Owner()->Name();
-	std::string module_name = nl->IsOperator() ? "$verific$" + netlist_name : RTLIL::escape_id(netlist_name);
+	std::string module_name = netlist_name;
+
+	if (nl->IsOperator() || nl->IsPrimitive()) {
+		module_name = "$verific$" + module_name;
+	} else {
+		if (!norename && *nl->Name()) {
+			module_name += "(";
+			module_name += nl->Name();
+			module_name += ")";
+		}
+		module_name = "\\" + module_name;
+	}
 
 	netlist = nl;
 
@@ -1256,7 +1275,7 @@ void VerificImporter::import_netlist(RTLIL::Design *design, Netlist *nl, std::se
 		if (inst->Type() == PRIM_SVA_ASSERT || inst->Type() == PRIM_SVA_IMMEDIATE_ASSERT)
 			sva_asserts.insert(inst);
 
-		if (inst->Type() == PRIM_SVA_ASSUME || inst->Type() == PRIM_SVA_IMMEDIATE_ASSUME)
+		if (inst->Type() == PRIM_SVA_ASSUME || inst->Type() == PRIM_SVA_IMMEDIATE_ASSUME || inst->Type() == PRIM_SVA_RESTRICT)
 			sva_assumes.insert(inst);
 
 		if (inst->Type() == PRIM_SVA_COVER || inst->Type() == PRIM_SVA_IMMEDIATE_COVER)
@@ -1396,8 +1415,20 @@ void VerificImporter::import_netlist(RTLIL::Design *design, Netlist *nl, std::se
 	import_verific_cells:
 		nl_todo.insert(inst->View());
 
-		RTLIL::Cell *cell = module->addCell(inst_name, inst->IsOperator() ?
-				std::string("$verific$") + inst->View()->Owner()->Name() : RTLIL::escape_id(inst->View()->Owner()->Name()));
+		std::string inst_type = inst->View()->Owner()->Name();
+
+		if (inst->View()->IsOperator() || inst->View()->IsPrimitive()) {
+			inst_type = "$verific$" + inst_type;
+		} else {
+			if (*inst->View()->Name()) {
+				inst_type += "(";
+				inst_type += inst->View()->Name();
+				inst_type += ")";
+			}
+			inst_type = "\\" + inst_type;
+		}
+
+		RTLIL::Cell *cell = module->addCell(inst_name, inst_type);
 
 		if (inst->IsPrimitive() && mode_keep)
 			cell->attributes["\\keep"] = 1;
@@ -1868,6 +1899,9 @@ void verific_import(Design *design, const std::map<std::string,std::string> &par
 	if (!verific_error_msg.empty())
 		log_error("%s\n", verific_error_msg.c_str());
 
+	for (auto nl : nl_todo)
+	    nl->ChangePortBusStructures(1 /* hierarchical */);
+
 	VerificExtNets worker;
 	for (auto nl : nl_todo)
 		worker.run(nl);
@@ -1876,7 +1910,7 @@ void verific_import(Design *design, const std::map<std::string,std::string> &par
 		Netlist *nl = *nl_todo.begin();
 		if (nl_done.count(nl) == 0) {
 			VerificImporter importer(false, false, false, false, false, false, false);
-			importer.import_netlist(design, nl, nl_todo);
+			importer.import_netlist(design, nl, nl_todo, nl->Owner()->Name() == top);
 		}
 		nl_todo.erase(nl);
 		nl_done.insert(nl);
@@ -1939,10 +1973,16 @@ struct VerificPass : public Pass {
 		log("Load the specified VHDL files into Verific.\n");
 		log("\n");
 		log("\n");
-		log("    verific -work <libname> {-sv|-vhdl|...} <hdl-file>\n");
+		log("    verific [-work <libname>] {-sv|-vhdl|...} <hdl-file>\n");
 		log("\n");
 		log("Load the specified Verilog/SystemVerilog/VHDL file into the specified library.\n");
 		log("(default library when -work is not present: \"work\")\n");
+		log("\n");
+		log("\n");
+		log("    verific [-L <libname>] {-sv|-vhdl|...} <hdl-file>\n");
+		log("\n");
+		log("Look up external definitions in the specified library.\n");
+		log("(-L may be used more than once)\n");
 		log("\n");
 		log("\n");
 		log("    verific -vlog-incdir <directory>..\n");
@@ -2036,7 +2076,12 @@ struct VerificPass : public Pass {
 		log("  -d <dump_file>\n");
 		log("    Dump the Verific netlist as a verilog file.\n");
 		log("\n");
-		log("Visit http://verific.com/ for more information on Verific.\n");
+		log("\n");
+		log("Use Symbiotic EDA Suite if you need Yosys+Verifc.\n");
+		log("https://www.symbioticeda.com/seda-suite\n");
+		log("\n");
+		log("Contact office@symbioticeda.com for free evaluation\n");
+		log("binaries of Symbiotic EDA Suite.\n");
 		log("\n");
 	}
 #ifdef YOSYS_ENABLE_VERIFIC
@@ -2045,7 +2090,13 @@ struct VerificPass : public Pass {
 		static bool set_verific_global_flags = true;
 
 		if (check_noverific_env())
-			log_cmd_error("This version of Yosys is built without Verific support.\n");
+			log_cmd_error("This version of Yosys is built without Verific support.\n"
+					"\n"
+					"Use Symbiotic EDA Suite if you need Yosys+Verifc.\n"
+					"https://www.symbioticeda.com/seda-suite\n"
+					"\n"
+					"Contact office@symbioticeda.com for free evaluation\n"
+					"binaries of Symbiotic EDA Suite.\n");
 
 		log_header(design, "Executing VERIFIC (loading SystemVerilog and VHDL designs using Verific).\n");
 
@@ -2158,10 +2209,15 @@ struct VerificPass : public Pass {
 			goto check_error;
 		}
 
+		veri_file::RemoveAllLOptions();
 		for (; argidx < GetSize(args); argidx++)
 		{
 			if (args[argidx] == "-work" && argidx+1 < GetSize(args)) {
 				work = args[++argidx];
+				continue;
+			}
+			if (args[argidx] == "-L" && argidx+1 < GetSize(args)) {
+				veri_file::AddLOption(args[++argidx].c_str());
 				continue;
 			}
 			break;
@@ -2339,6 +2395,8 @@ struct VerificPass : public Pass {
 			if (argidx > GetSize(args) && args[argidx].compare(0, 1, "-") == 0)
 				cmd_error(args, argidx, "unknown option");
 
+			std::set<std::string> top_mod_names;
+
 			if (mode_all)
 			{
 				log("Running hier_tree::ElaborateAll().\n");
@@ -2361,12 +2419,13 @@ struct VerificPass : public Pass {
 			else
 			{
 				if (argidx == GetSize(args))
-					log_cmd_error("No top module specified.\n");
+					cmd_error(args, argidx, "No top module specified.\n");
 
 				Array veri_modules, vhdl_units;
 				for (; argidx < GetSize(args); argidx++)
 				{
 					const char *name = args[argidx].c_str();
+					top_mod_names.insert(name);
 					VeriLibrary* veri_lib = veri_file::GetLibrary(work.c_str(), 1);
 
 					if (veri_lib) {
@@ -2422,6 +2481,9 @@ struct VerificPass : public Pass {
 					worker.run(nl);
 			}
 
+			for (auto nl : nl_todo)
+				nl->ChangePortBusStructures(1 /* hierarchical */);
+
 			if (!dumpfile.empty()) {
 				VeriWrite veri_writer;
 				veri_writer.WriteFile(dumpfile.c_str(), Netlist::PresentDesign());
@@ -2432,7 +2494,7 @@ struct VerificPass : public Pass {
 				if (nl_done.count(nl) == 0) {
 					VerificImporter importer(mode_gates, mode_keep, mode_nosva,
 							mode_names, mode_verific, mode_autocover, mode_fullinit);
-					importer.import_netlist(design, nl, nl_todo);
+					importer.import_netlist(design, nl, nl_todo, top_mod_names.count(nl->Owner()->Name()));
 				}
 				nl_todo.erase(nl);
 				nl_done.insert(nl);
@@ -2447,7 +2509,7 @@ struct VerificPass : public Pass {
 			goto check_error;
 		}
 
-		log_cmd_error("Missing or unsupported mode parameter.\n");
+		cmd_error(args, argidx, "Missing or unsupported mode parameter.\n");
 
 	check_error:
 		if (!verific_error_msg.empty())
@@ -2456,7 +2518,13 @@ struct VerificPass : public Pass {
 	}
 #else /* YOSYS_ENABLE_VERIFIC */
 	void execute(std::vector<std::string>, RTLIL::Design *) YS_OVERRIDE {
-		log_cmd_error("This version of Yosys is built without Verific support.\n");
+		log_cmd_error("This version of Yosys is built without Verific support.\n"
+				"\n"
+				"Use Symbiotic EDA Suite if you need Yosys+Verifc.\n"
+				"https://www.symbioticeda.com/seda-suite\n"
+				"\n"
+				"Contact office@symbioticeda.com for free evaluation\n"
+				"binaries of Symbiotic EDA Suite.\n");
 	}
 #endif
 } VerificPass;
@@ -2514,14 +2582,14 @@ struct ReadPass : public Pass {
 		static bool use_verific = verific_available;
 
 		if (args.size() < 2 || args[1][0] != '-')
-			log_cmd_error("Missing mode parameter.\n");
+			cmd_error(args, 1, "Missing mode parameter.\n");
 
 		if (args[1] == "-verific" || args[1] == "-noverific") {
 			if (args.size() != 2)
-				log_cmd_error("Additional arguments to -verific/-noverific.\n");
+				cmd_error(args, 1, "Additional arguments to -verific/-noverific.\n");
 			if (args[1] == "-verific") {
 				if (!verific_available)
-					log_cmd_error("This version of Yosys is built without Verific support.\n");
+					cmd_error(args, 1, "This version of Yosys is built without Verific support.\n");
 				use_verific = true;
 			} else {
 				use_verific = false;
@@ -2530,7 +2598,7 @@ struct ReadPass : public Pass {
 		}
 
 		if (args.size() < 3)
-			log_cmd_error("Missing file name parameter.\n");
+			cmd_error(args, 3, "Missing file name parameter.\n");
 
 		if (args[1] == "-vlog95" || args[1] == "-vlog2k") {
 			if (use_verific) {
@@ -2562,7 +2630,7 @@ struct ReadPass : public Pass {
 				args[0] = "verific";
 				Pass::call(design, args);
 			} else {
-				log_cmd_error("This version of Yosys is built without Verific support.\n");
+				cmd_error(args, 1, "This version of Yosys is built without Verific support.\n");
 			}
 			return;
 		}
@@ -2609,7 +2677,7 @@ struct ReadPass : public Pass {
 			return;
 		}
 
-		log_cmd_error("Missing or unsupported mode parameter.\n");
+		cmd_error(args, 1, "Missing or unsupported mode parameter.\n");
 	}
 } ReadPass;
 
