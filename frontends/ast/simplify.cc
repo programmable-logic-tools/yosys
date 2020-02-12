@@ -2181,9 +2181,11 @@ skip_dynamic_range_lvalue_expansion:;
 					str == "\\$floor" || str == "\\$ceil" || str == "\\$sin" || str == "\\$cos" || str == "\\$tan" ||
 					str == "\\$asin" || str == "\\$acos" || str == "\\$atan" || str == "\\$atan2" || str == "\\$hypot" ||
 					str == "\\$sinh" || str == "\\$cosh" || str == "\\$tanh" || str == "\\$asinh" || str == "\\$acosh" || str == "\\$atanh" ||
-					str == "\\$rtoi" || str == "\\$itor")
+					str == "\\$rtoi" || str == "\\$itor" ||
+					str == "\\$max"
+			    )
 			{
-				bool func_with_two_arguments = str == "\\$pow" || str == "\\$atan2" || str == "\\$hypot";
+				bool func_with_two_arguments = (str == "\\$pow" || str == "\\$atan2" || str == "\\$hypot" || str == "\\$max");
 				double x = 0, y = 0;
 
 				if (func_with_two_arguments) {
@@ -2218,7 +2220,15 @@ skip_dynamic_range_lvalue_expansion:;
 					y = children[1]->asReal(child_sign_hint);
 				}
 
-				if (str == "\\$rtoi") {
+				if (str == "\\$max")
+				{
+					uint32_t v = x;
+					if (y > x)
+						v = y;
+					newNode = mkconst_int(v, false);
+					printf("max(%d, %d) = %d;\n", (int32_t) x, (int32_t) y, v);
+				}
+				else if (str == "\\$rtoi") {
 					newNode = AstNode::mkconst_int(x, true);
 				} else {
 					newNode = new AstNode(AST_REALVALUE);
