@@ -1016,9 +1016,9 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 				RTLIL::Wire *wire = current_module->addWire(str);
 				wire->attributes["\\src"] = stringf("%s:%d", filename.c_str(), linenum);
 				wire->name = str;
-				if (flag_autowire)
-					log_file_warning(filename, linenum, "Identifier `%s' is implicitly declared.\n", str.c_str());
-				else
+//				if (flag_autowire)
+//					log_file_warning(filename, linenum, "Identifier `%s' is implicitly declared.\n", str.c_str());
+//				else
 					log_file_error(filename, linenum, "Identifier `%s' is implicitly declared and `default_nettype is set to none.\n", str.c_str());
 			}
 			else if (id2ast->type == AST_PARAMETER || id2ast->type == AST_LOCALPARAM) {
