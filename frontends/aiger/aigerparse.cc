@@ -494,13 +494,16 @@ void AigerReader::parse_xaiger()
 			log_debug("k: dataSize=%u structNum=%u\n", dataSize, structNum);
 			for (unsigned i = 0; i < structNum; ++i) {
 				uint32_t lutNum = parse_xaiger_literal(f);
-				for (unsigned j = 0; j < lutNum; ++j) {
-					uint32_t nodeID = parse_xaiger_literal(f);
-					auto output_cell = module->cell(stringf("$and$aiger%d$%d", aiger_autoidx, nodeID));
-					log_assert(output_cell);
-					auto r YS_ATTRIBUTE(unused) = output_cell->attributes.emplace(ID::abc9_pack, i);
-					log_assert(r.second);
-				}
+				if (lutNum == 1)
+					parse_xaiger_literal(f);
+				else
+					for (unsigned j = 0; j < lutNum; ++j) {
+						uint32_t nodeID = parse_xaiger_literal(f);
+						auto output_cell = module->cell(stringf("$and$aiger%d$%d", aiger_autoidx, nodeID));
+						log_assert(output_cell);
+						auto r YS_ATTRIBUTE(unused) = output_cell->attributes.emplace(ID::abc9_pack, i);
+						log_assert(r.second);
+					}
 			}
 		}
 		else if (c == 'a' || c == 'i' || c == 'o' || c == 's') {
