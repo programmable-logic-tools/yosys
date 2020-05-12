@@ -1013,7 +1013,7 @@ void reintegrate(RTLIL::Module *module)
 	//   treated as being "free"), in particular driving primary
 	//   outputs (real primary outputs, or cells treated as blackboxes)
 	//   or driving box inputs.
-	// Instead of just mapping those $_NOT_ gates into 2-input $lut-s
+	// Instead of just mapping those $_NOT_ gates into 1-input $lut-s
 	//   at an area and delay cost, see if it is possible to push
 	//   this $_NOT_ into the driving LUT, or into all sink LUTs.
 	// When this is not possible, (i.e. this signal drives two primary
@@ -1087,6 +1087,14 @@ clone_lut:
 				driver_lut->getPort(ID::A),
 				y_bit,
 				driver_mask);
+		// Since there is no guarantee that driver_lut is not
+		// dangling, move the attribute onto the new inverted
+		// cell
+		auto kt = driver_lut->attributes.find(ID::abc9_pack);
+		if (kt != driver_lut->attributes.end()) {
+			cell->attributes.emplace(kt->first, std::move(kt->second));
+			driver_lut->attributes.erase(kt);
+		}
 		for (auto &bit : cell->connections_.at(ID::A)) {
 			bit.wire = module->wires_.at(remap_name(bit.wire->name));
 			bit2sinks[bit].push_back(cell);
