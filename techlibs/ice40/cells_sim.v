@@ -208,6 +208,142 @@ module SB_LUT4 (output O, input I0, I1, I2, I3);
 `endif
 endmodule
 
+`ifdef ABC9_CASCADE
+(* abc9_lut=2 *)
+module $__ABC9_CASCADE5 (output O, input [4:0] I);
+`ifdef ICE40_HX
+	specify
+		/* Since ABC9 handles LUT cascades as being a restricted 5-input LUT,
+		*  it is currently incapable of performing timing analysis as a cascade
+		*  as opposed to a regular LUT.
+		*  The effect of this is that such a 5-input LUT can be decomposed as
+		*  a LUT4+LUT2, LUT3+LUT3, or LUT2+LUT4 cascade, each with different
+		*  timing arcs, and ABC9 considers any pin from the restricted 5-input
+		*  LUT to be assigned to the next-fastest pin on the first or second LUT.
+		*  Thus, the best we can do is a delay weighted by the probability of
+		*  that pin being selected.
+		*
+		*  Python script:
+		*  first = [max(316,288), max(379,351), max(400,379), max(449,386)]
+		*  second = [max(379+267,351+274), max(379+309,351+347), max(379+323,351+379), max(379+365,351+386)]
+		*  def branch(result, first, second):
+		*      if len(result) == 5: yield result
+		*      else:
+		*          if first:  yield from branch(result + first[0:1], first[1:], second)
+		*          if second: yield from branch(result + second[0:1], first, second[1:])
+		*  for i in zip(*branch([],first,second)): print(sum(i)/len(i))
+		*/
+		(I[4] => O) = 481;
+		(I[3] => O) = 508;
+		(I[2] => O) = 528;
+		(I[1] => O) = 545;
+		(I[0] => O) = 560;
+	endspecify
+`endif
+`ifdef ICE40_LX
+	specify
+		/* first = [max(465,423), max(558,517), max(589,558), max(662,569)]
+		*  second = [max(558+393,517+403), max(558+455,517+507), max(558+475,517+558), max(558+538,517+569)]
+		*/
+		(I[4] => O) = 708;
+		(I[3] => O) = 747;
+		(I[2] => O) = 777;
+		(I[1] => O) = 802;
+		(I[0] => O) = 825;
+	endspecify
+`endif
+`ifdef ICE40_U
+	specify
+		/* first = [max(861,874), max(1179,1205), max(1179,1232), max(1245,1285)]
+		*  second = [max(1179+583,1245+609), max(1179+702,1245+781), max(1179+742,1245+887), max(1179+848,1245+901)]
+		*/
+		(I[4] => O) = 1364;
+		(I[3] => O) = 1481
+		(I[2] => O) = 1562;
+		(I[1] => O) = 1615;
+		(I[0] => O) = 1652;
+	endspecify
+`endif
+endmodule
+
+(* abc9_lut=2 *)
+module $__ABC9_CASCADE6 (output O, input [5:0] I);
+`ifdef ICE40_HX
+	specify
+		// See $__ABC9_CASCADE5 for explanation
+		(I[5] => O) = 481;
+		(I[4] => O) = 506;
+		(I[3] => O) = 527;
+		(I[2] => O) = 543;
+		(I[1] => O) = 558;
+		(I[0] => O) = 572;
+	endspecify
+`endif
+`ifdef ICE40_LX
+	specify
+		// See $__ABC9_CASCADE5 for explanation
+		(I[5] => O) = 708;
+		(I[4] => O) = 745;
+		(I[3] => O) = 774;
+		(I[2] => O) = 799;
+		(I[1] => O) = 821;
+		(I[0] => O) = 843;
+	endspecify
+`endif
+`ifdef ICE40_U
+	specify
+		// See $__ABC9_CASCADE5 for explanation
+		(I[5] => O) = 1364;
+		(I[4] => O) = 1475;
+		(I[3] => O) = 1556
+		(I[2] => O) = 1613;
+		(I[1] => O) = 1653;
+		(I[0] => O) = 1682;
+	endspecify
+`endif
+endmodule
+
+(* abc9_lut=2 *)
+module $__ABC9_CASCADE7 (output O, input [6:0] I);
+`ifdef ICE40_HX
+	specify
+		// See $__ABC9_CASCADE5 for explanation
+		(I[6] => O) = 481;
+		(I[5] => O) = 506;
+		(I[4] => O) = 526;
+		(I[3] => O) = 543;
+		(I[2] => O) = 557;
+		(I[1] => O) = 570;
+		(I[0] => O) = 583;
+	endspecify
+`endif
+`ifdef ICE40_LX
+	specify
+		// See $__ABC9_CASCADE5 for explanation
+		(I[6] => O) = 708;
+		(I[5] => O) = 744;
+		(I[4] => O) = 773;
+		(I[3] => O) = 798;
+		(I[2] => O) = 820;
+		(I[1] => O) = 840;
+		(I[0] => O) = 859;
+	endspecify
+`endif
+`ifdef ICE40_U
+	specify
+		// See $__ABC9_CASCADE5 for explanation
+		(I[6] => O) = 1364;
+		(I[5] => O) = 1472;
+		(I[4] => O) = 1553;
+		(I[3] => O) = 1612
+		(I[2] => O) = 1654;
+		(I[1] => O) = 1682;
+		(I[0] => O) = 1701;
+	endspecify
+`endif
+endmodule
+`endif // ABC9_CASCADE
+
 (* lib_whitebox *)
 module SB_CARRY (output CO, input I0, I1, CI);
 	assign CO = (I0 && I1) || ((I0 || I1) && CI);
