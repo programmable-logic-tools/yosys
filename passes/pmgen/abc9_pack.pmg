@@ -1,13 +1,14 @@
-pattern abc9_pack_NNN4
+pattern abc9_pack_44
 
 match root
 	select root->type == $lut
-	select param(root, \WIDTH) == 4
+	select param(root, \WIDTH).as_int() > 1
 	select root->has_attribute(\abc9_pack)
 endmatch
 
 match A0
 	select A0->type == $lut
+	select param(A0, \WIDTH).as_int() > 1
 	select A0->has_attribute(\abc9_pack)
 	index <SigBit> port(A0, \Y) === port(root, \A)[0]
 	index <Const> A0->attributes.at(\abc9_pack) === root->attributes.at(\abc9_pack)
@@ -15,7 +16,9 @@ match A0
 endmatch
 
 match A1
+	if !A0
 	select A1->type == $lut
+	select param(A1, \WIDTH).as_int() > 1
 	select A1->has_attribute(\abc9_pack)
 	index <SigBit> port(A1, \Y) === port(root, \A)[1]
 	index <Const> A1->attributes.at(\abc9_pack) === root->attributes.at(\abc9_pack)
@@ -23,7 +26,10 @@ match A1
 endmatch
 
 match A2
+	if !A0 && !A1
+	if param(root, \WIDTH).as_int() > 2
 	select A2->type == $lut
+	select param(A2, \WIDTH).as_int() > 1
 	select A2->has_attribute(\abc9_pack)
 	index <SigBit> port(A2, \Y) === port(root, \A)[2]
 	index <Const> A2->attributes.at(\abc9_pack) === root->attributes.at(\abc9_pack)
@@ -31,7 +37,10 @@ match A2
 endmatch
 
 match A3
+	if !A0 && !A1 && !A2
+	if param(root, \WIDTH).as_int() > 3
 	select A3->type == $lut
+	select param(A3, \WIDTH).as_int() > 1
 	select A3->has_attribute(\abc9_pack)
 	index <SigBit> port(A3, \Y) === port(root, \A)[3]
 	index <Const> A3->attributes.at(\abc9_pack) === root->attributes.at(\abc9_pack)
