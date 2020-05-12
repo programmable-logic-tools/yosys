@@ -103,6 +103,9 @@ struct SynthIce40Pass : public ScriptPass
 		log("    -abc9\n");
 		log("        use new ABC9 flow (EXPERIMENTAL)\n");
 		log("\n");
+		log("    -cascade\n");
+		log("        enable LUT cascades (requires -abc9, EXPERIMENTAL)\n");
+		log("\n");
 		log("    -flowmap\n");
 		log("        use FlowMap LUT techmapping instead of abc (EXPERIMENTAL)\n");
 		log("\n");
@@ -113,7 +116,7 @@ struct SynthIce40Pass : public ScriptPass
 	}
 
 	string top_opt, blif_file, edif_file, json_file, device_opt;
-	bool nocarry, nodffe, nobram, dsp, flatten, retime, noabc, abc2, vpr, abc9, flowmap;
+	bool nocarry, nodffe, nobram, dsp, flatten, retime, noabc, abc2, vpr, abc9, cascade, flowmap;
 	int min_ce_use;
 
 	void clear_flags() YS_OVERRIDE
@@ -133,6 +136,7 @@ struct SynthIce40Pass : public ScriptPass
 		abc2 = false;
 		vpr = false;
 		abc9 = false;
+		cascade = false;
 		flowmap = false;
 		device_opt = "hx";
 	}
@@ -221,6 +225,10 @@ struct SynthIce40Pass : public ScriptPass
 				abc9 = true;
 				continue;
 			}
+			if (args[argidx] == "-cascade") {
+				cascade = true;
+				continue;
+			}
 			if (args[argidx] == "-device" && argidx+1 < args.size()) {
 				device_opt = args[++argidx];
 				continue;
@@ -244,6 +252,8 @@ struct SynthIce40Pass : public ScriptPass
 			log_cmd_error("-abc9 is incompatible with -noabc!\n");
 		if (abc9 && flowmap)
 			log_cmd_error("-abc9 is incompatible with -flowmap!\n");
+		if (cascade && !abc9)
+			log_cmd_error("-cascade option requires -abc9!\n");
 		if (flowmap && noabc)
 			log_cmd_error("-flowmap is incompatible with -noabc!\n");
 
@@ -264,6 +274,8 @@ struct SynthIce40Pass : public ScriptPass
 			define = "-D ICE40_U";
 		else
 			define = "-D ICE40_HX";
+		if (cascade)
+			define += " -D ABC9_CASCADE";
 		if (check_label("begin"))
 		{
 			run("read_verilog " + define + " -lib -specify +/ice40/cells_sim.v");
@@ -387,7 +399,11 @@ struct SynthIce40Pass : public ScriptPass
 						k = stringf("synth_ice40.abc9.%s.W", device_opt.c_str());
 						abc9_opts += stringf(" -W %s", RTLIL::constpad.at(k).c_str());
 					}
+					if (cascade)
+						run("scratchpad -set abc9.if.ST 44");
 					run("abc9 " + abc9_opts);
+					if (cascade)
+						run("scratchpad -unset abc9.if.ST");
 				}
 				else
 					run("abc -dress -lut 4", "(skip if -noabc)");
