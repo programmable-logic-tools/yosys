@@ -370,6 +370,9 @@ std::string frontend_verilog_preproc(std::istream &f, std::string filename, cons
 			std::ifstream ff;
 			ff.clear();
 			std::string fixed_fn = fn;
+
+			std::cerr << "Include: " << fn << std::endl;
+
 			ff.open(fixed_fn.c_str());
 
 			bool filename_path_sep_found;
@@ -385,6 +388,9 @@ std::string frontend_verilog_preproc(std::istream &f, std::string filename, cons
 #endif
 
 			if (ff.fail() && fn.size() > 0 && fn_relative && filename_path_sep_found) {
+
+				std::cerr << "\tNot found." << std::endl;
+
 				// if the include file was not found, it is not given with an absolute path, and the
 				// currently read file is given with a path, then try again relative to its directory
 				ff.clear();
@@ -393,21 +399,42 @@ std::string frontend_verilog_preproc(std::istream &f, std::string filename, cons
 #else
 				fixed_fn = filename.substr(0, filename.rfind('/')+1) + fn;
 #endif
+
+				std::cerr << "\tTrying: " << fixed_fn << std::endl;
+
 				ff.open(fixed_fn);
 			}
+
 			if (ff.fail() && fn.size() > 0 && fn_relative) {
+
+				std::cerr << "\tNot found." << std::endl;
+
 				// if the include file was not found and it is not given with an absolute path, then
 				// search it in the include path
 				for (auto incdir : include_dirs) {
 					ff.clear();
 					fixed_fn = incdir + '/' + fn;
+					std::cerr << "\tTrying: " << fixed_fn << std::endl;
 					ff.open(fixed_fn);
-					if (!ff.fail()) break;
+					if (!ff.fail())
+					{
+						std::cerr << "\tFound." << std::endl;
+						break;
+					}
+					else
+					{
+						std::cerr << "\tNot found." << std::endl;
+					}
 				}
 			}
+
 			if (ff.fail()) {
+				std::cerr << "\tResult: Not found." << std::endl;
+
 				output_code.push_back("`file_notfound " + fn);
 			} else {
+				std::cerr << "\tResult: Found." << std::endl;
+
 				input_file(ff, fixed_fn);
 				yosys_input_files.insert(fixed_fn);
 			}
